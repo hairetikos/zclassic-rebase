@@ -2123,13 +2123,15 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // cache size calculations
     int64_t nDbCacheArg = GetArg("-dbcache", nDefaultDbCache);
     // Raise the default cache on 64-bit when the user hasn't set -dbcache: a larger
-    // cache means fewer leveldb flushes during sync and a faster, less "frozen-looking"
-    // cold block-index load on an already-synced chain. A full reindex / chainstate
-    // rebuild replays genesis..tip, so it benefits from an even larger cache. Never
-    // override an explicit -dbcache; 64-bit only (avoid OOM on 32-bit); capped modestly.
+    // cache means far fewer leveldb flushes during sync and a faster, less
+    // "frozen-looking" cold block-index load on an already-synced chain. The
+    // compiled nDefaultDbCache (450 MiB) is a 2016-era value; on a 64-bit host a
+    // genesis..tip initial block download does the same full replay as a reindex
+    // and is dominated by UTXO-cache flush frequency, so give IBD the same larger
+    // budget reindex already gets. Never override an explicit -dbcache; 64-bit
+    // only (avoid OOM on 32-bit); still capped by nMaxDbCache.
     if (!mapArgs.count("-dbcache") && sizeof(void*) > 4) {
-        int64_t nDefault64 = (fReindex || fReindexChainState) ? 2048 : 1024;
-        nDbCacheArg = std::max(nDbCacheArg, std::min<int64_t>(nMaxDbCache, nDefault64));
+        nDbCacheArg = std::max(nDbCacheArg, std::min<int64_t>(nMaxDbCache, 2048));
     }
     int64_t nTotalCache = (nDbCacheArg << 20);
     nTotalCache = std::max(nTotalCache, nMinDbCache << 20); // total cache cannot be less than nMinDbCache
