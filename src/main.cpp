@@ -4515,7 +4515,19 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, 
     // mark the chain as parked. If it has enough work, it'll unpark
     // automatically. We mark the block as parked at the very last minute so we
     // can make sure everything is ready to be reorged if needed.
-    if (GetBoolArg("-parkdeepreorg", true)) {
+    //
+    // Deep-reorg parking is an anti-51%-attack defence for a node that is
+    // already synced to the network tip: it makes a node prefer the chain it
+    // saw first unless a competing fork demonstrably out-works it. During
+    // initial block download there is no "tip we are defending" yet — we are
+    // assembling history from many peers and routinely receive perfectly valid
+    // blocks on short side-forks (and out-of-order). Parking them there is
+    // pointless (ActivateBestChain re-evaluates work anyway) and actively
+    // harmful: each parked block triggers the unpark / 2x-PoW accounting walk
+    // and extra setDirtyBlockIndex churn, which is the "Park block ... as it
+    // would cause a deep reorg" log spam that drags sync to a crawl. So only
+    // arm the parking heuristic once we are out of IBD.
+    if (GetBoolArg("-parkdeepreorg", true) && !IsInitialBlockDownload()) {
         const CBlockIndex *pindexFork = chainActive.FindFork(pindex);
         if (pindexFork && pindexFork->nHeight + 1 < pindex->nHeight) {
             LogPrintf("Park block %s as it would cause a deep reorg.\n",
